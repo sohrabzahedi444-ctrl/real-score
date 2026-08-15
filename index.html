@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Real Score — Post-Screening Rating</title>
+
+<!-- ============================================================
+     FONTS
+     Fraunces  → characterful serif for the score numeral & title
+                 (old-style figures give the number real presence)
+     Manrope   → clean geometric sans for UI copy & labels
+     ============================================================ -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+  /* =========================================================
+     DESIGN TOKENS
+     A small, deliberate palette: near-black cinema backdrop,
+     a velvety crimson as the single accent. Everything else is
+     restrained so the crimson (and the score) reads as the one
+     thing that "lights up".
+     ========================================================= */
+  :root{
+    --bg:            #000000;
+    --bg-glow:        #000000;
+    --surface:        #08090a;
+    --surface-raised: #1a1e24;
+    --line:           rgba(237,235,230,0.08);
+    --line-strong:    rgba(237,235,230,0.14);
+
+    --text:           #edebe6;
+    --text-dim:       rgba(237,235,230,0.58);
+    --text-faint:     rgba(237,235,230,0.34);
+
+    --accent:         #a51c3f;
+    --accent-soft:    rgba(165,28,63,0.18);
+    --accent-strong:  #c93b5c;
+
+    --radius-lg: 26px;
+    --radius-md: 16px;
+    --radius-sm: 10px;
+
+    --ease: cubic-bezier(.22,1,.36,1);
+  }
+
+  /* Respect reduced-motion preference everywhere */
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{
+      animation-duration: 0.001ms !important;
+      animation-delay: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin:0;
+    padding:0;
+    min-height:100%;
+    background: #000000;
+  }
+
+  body{
+    background: var(--bg-glow);
+    color: var(--text);
+    font-family: 'Manrope', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding: 32px 16px 28px;
+    min-height:100vh;
+  }
+
+  /* =========================================================
+     PAGE FOOTER
+     A permanent, global element — independent of content type,
+     score, or language. Small, quiet, and always in the same
+     spot at the very bottom of the page.
+     ========================================================= */
+  .app-footer{
+    width:100%;
+    max-width: 420px;
+    margin-top: 26px;
+    text-align:center;
+    font-family:'Manrope', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight:500;
+    letter-spacing: 0.02em;
+    color: var(--text-faint);
+    white-space:nowrap;
+  }
+
+  /* =========================================================
+     INTRO SEQUENCE
+     A brief, one-time branded splash (~1.1s), then the app
+     itself fades + scales in, followed by the five questions
+     cascading in one after another. Pure CSS timeline — no
+     layout thrash, only opacity/transform, so it stays smooth
+     on mobile. Runs once per page load; switching content type
+     or language afterward never replays it.
+     ========================================================= */
+  .intro-splash{
+    position:fixed;
+    inset:0;
+    z-index:1000;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    background: #000000;
+    animation: introFade 1.1s ease-out forwards;
+  }
+  @keyframes introFade{
+    0%   { opacity:1; }
+    72%  { opacity:1; }
+    100% { opacity:0; }
+  }
+  .intro-title{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size: 34px;
+    letter-spacing:-0.01em;
+    color: var(--text);
+  }
+  .intro-sub{
+    font-family:'Manrope', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight:700;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color: var(--accent);
+  }
+
+  /* Holds the type switcher above the card, both sharing one
+     centered column so they line up and resize together. */
+  .app-shell{
+    width:100%;
+    max-width: 420px;
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:14px;
+    animation: introCardReveal .5s var(--ease) 1.1s both;
+  }
+  @keyframes introCardReveal{
+    0%   { opacity:0; transform: scale(0.985); }
+    100% { opacity:1; transform: scale(1); }
+  }
+
+  /* =========================================================
+     CONTENT-TYPE SWITCHER — MOVIE / SERIES / MINI SERIES
+     A rounded pill track with a highlight that physically
+     slides beneath the selected label. Same tokens, same
+     radius language, same accent as the rest of the app.
+     ========================================================= */
+  .type-switcher{
+    position:relative;
+    display:flex;
+    width:100%;
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 4px;
+  }
+  .type-highlight{
+    position:absolute;
+    top:4px;
+    left:4px;
+    height: calc(100% - 8px);
+    width: calc((100% - 8px) / 3);
+    background: linear-gradient(135deg, var(--accent-strong), var(--accent) 65%, #6e1029);
+    border-radius: 999px;
+    box-shadow: 0 4px 14px -5px rgba(165,28,63,0.6);
+    transform: translateX(0%);
+    transition: transform .4s var(--ease);
+  }
+  .type-btn{
+    -webkit-tap-highlight-color: transparent;
+    position:relative;
+    z-index:1;
+    flex:1;
+    appearance:none;
+    cursor:pointer;
+    font-family:'Manrope', system-ui, sans-serif;
+    border:none;
+    background:transparent;
+    color: rgba(237,235,230,0.26);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    padding: 12px 8px 12px 4px;
+    border-radius: 999px;
+    white-space:nowrap;
+    transition: color .3s var(--ease);
+  }
+  .type-btn:focus-visible{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .type-btn.active{ color: #fbeef1; }
+
+  /* =========================================================
+     CARD — the whole app lives inside a single ticket-like card
+     ========================================================= */
+  .card{
+    width:100%;
+    max-width: 420px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 28px 22px 26px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.03) inset,
+      0 30px 60px -20px rgba(0,0,0,0.6);
+    position: relative;
+    overflow:hidden;
+  }
+
+  /* Faint perforated edge along the top of the card — a quiet
+     nod to a film strip, purely textural, not another UI control */
+  .card::before{
+    content:"";
+    position:absolute;
+    top:0; left:0; right:0;
+    height:10px;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.10) 1.6px, transparent 1.6px);
+    background-size: 16px 10px;
+    background-position: 8px 0;
+    opacity:0.5;
+  }
+
+  /* =========================================================
+     LANGUAGE TOGGLE — EN / FA
+     Small pill switch, top-right of the card. Uses only the
+     existing color tokens so it matches the rest of the app.
+     ========================================================= */
+  .lang-toggle{
+    position:absolute;
+    top:22px;
+    right:22px;
+    display:flex;
+    gap:2px;
+    padding:3px;
+    background: var(--surface-raised);
+    border:1px solid var(--line-strong);
+    border-radius:999px;
+  }
+  .lang-btn{
+    -webkit-tap-highlight-color: transparent;
+    appearance:none;
+    cursor:pointer;
+    font-family:'Manrope', system-ui, sans-serif;
+    border:none;
+    background:transparent;
+    color: var(--text-faint);
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:0.04em;
+    padding:6px 10px;
+    border-radius:999px;
+    transition: background var(--ease) .25s, color var(--ease) .25s;
+  }
+  .lang-btn:focus-visible{
+    outline:2px solid var(--accent);
+    outline-offset:2px;
+  }
+  .lang-btn.active{
+    background: linear-gradient(135deg, var(--accent-strong), var(--accent) 65%, #6e1029);
+    color:#fbeef1;
+  }
+
+  /* =========================================================
+     HEADER
+     ========================================================= */
+  .eyebrow{
+    display:block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 6px 0 6px;
+  }
+
+  h1{
+    font-family:'Fraunces', serif;
+    font-weight: 600;
+    font-size: 30px;
+    line-height:1.1;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle{
+    font-size: 12px;
+    color: rgba(237,235,230,0.68);
+    margin: 0 0 20px;
+    line-height:1.5;
+  }
+
+  /* =========================================================
+     TITLE FIELD — optional name of the thing being rated.
+     A wide, rounded rectangle that reads as part of the card's
+     own dark surface rather than a conventional form control:
+     near-black interior, a thin crimson outline with a soft
+     restrained glow (never neon).
+     Purely cosmetic to the result text — never read by scoring.
+     ========================================================= */
+  .title-field-wrap{
+    position:relative;
+    margin: 0 0 20px;
+  }
+  .title-field{
+    width:100%;
+    appearance:none;
+    background: #0b0c0e;
+    border: 1px solid rgba(165,28,63,0.45);
+    border-radius: 14px;
+    box-shadow: 0 0 0 1px rgba(165,28,63,0.06), 0 0 16px -6px rgba(165,28,63,0.35);
+    padding: 14px 16px;
+    font-family:'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    font-weight:500;
+    letter-spacing:0.01em;
+    color: var(--text);
+    transition: border-color .3s var(--ease), box-shadow .3s var(--ease);
+  }
+  .title-field::placeholder{
+    color: var(--text-faint);
+    font-weight:500;
+  }
+  .title-field:focus{
+    outline:none;
+    border-color: rgba(201,59,92,0.7);
+    box-shadow: 0 0 0 1px rgba(201,59,92,0.12), 0 0 18px -5px rgba(201,59,92,0.45);
+  }
+
+  /* Live "yes" indicator strip — five dots, one per question.
+     Each dot lights crimson the instant its question is answered
+     "yes", giving quiet real-time feedback as you go. */
+  .reel-strip{
+    display:flex;
+    gap:9px;
+    margin-bottom: 22px;
+  }
+  .reel-dot{
+    width:9px;
+    height:9px;
+    border-radius:50%;
+    background: var(--surface-raised);
+    border:1px solid var(--line-strong);
+    transition: background var(--ease) .25s, box-shadow var(--ease) .25s, transform var(--ease) .25s;
+  }
+  .reel-dot.lit{
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px 1px var(--accent-soft);
+    transform: scale(1.05);
+  }
+
+  /* =========================================================
+     QUESTIONS
+     ========================================================= */
+  /* Fades as a unit whenever the content type changes */
+  .questions-wrap{
+    transition: opacity .18s var(--ease);
+  }
+
+  .questions{
+    display:flex;
+    flex-direction:column;
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+
+  /* One-time cascading reveal for the five question rows present
+     at initial page load — fade + very slight scale, no sliding,
+     each starting a touch after the previous. Only ever plays
+     once: switching content type later just swaps text on these
+     same elements, it doesn't recreate them. */
+  .questions .question{
+    animation: introQuestionReveal .35s var(--ease) both;
+  }
+  @keyframes introQuestionReveal{
+    0%   { opacity:0; transform: scale(0.97); }
+    100% { opacity:1; transform: scale(1); }
+  }
+  .questions .question:nth-child(1){ animation-delay: 1.6s; }
+  .questions .question:nth-child(2){ animation-delay: 1.82s; }
+  .questions .question:nth-child(3){ animation-delay: 2.04s; }
+  .questions .question:nth-child(4){ animation-delay: 2.26s; }
+  .questions .question:nth-child(5){ animation-delay: 2.48s; }
+
+  /* Shown instead of .questions for a type with no question set
+     yet (Mini Series) — same restrained styling as the rest of
+     the app's quiet, secondary text. */
+  .questions-placeholder{
+    display:none;
+    text-align:center;
+    font-size: 13.5px;
+    line-height:1.6;
+    color: var(--text-dim);
+    padding: 30px 10px;
+    margin: 0 0 22px;
+  }
+
+  /* Each row is its own soft, rounded container. Transparent and
+     flush by default; once answered it gains a thin accent-tinted
+     border to mark the question as complete. */
+  .question{
+    display:flex;
+    flex-direction: column;
+    align-items:flex-start;
+    gap:10px;
+    padding: 12px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    transition: border-color .4s var(--ease), background-color .4s var(--ease), box-shadow .3s var(--ease);
+  }
+  .question.answered{
+    border-color: rgba(165,28,63,0.35);
+    background: rgba(165,28,63,0.05);
+  }
+  /* Persian mode: the choice group sits at the right edge of the
+     row. The actual slide is animated in JS (transform), this just
+     sets the resting position the animation settles into. */
+  .question.fa-align{
+    align-items: flex-end;
+  }
+
+  .question-text{
+    font-size: 13.5px;
+    line-height:1.42;
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  /* =========================================================
+     THREE-OPTION CHOICE CONTROL — No / Partially / Yes
+     Each question gets its own small group of three pill
+     buttons. Picking one enlarges + highlights it in the accent
+     color while the other two collapse away; tapping the chosen
+     pill again re-opens the group so the answer can be changed.
+     ========================================================= */
+  .choice-group{
+    display:flex;
+    align-items:center;
+    gap: 6px;
+    flex-shrink:0;
+  }
+
+  .choice{
+    -webkit-tap-highlight-color: transparent;
+    appearance:none;
+    cursor:pointer;
+    font-family: inherit;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-raised);
+    color: var(--text-dim);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 7px 10px;
+    margin:0;
+    border-radius: 999px;
+    white-space:nowrap;
+    max-width: 90px;
+    overflow:hidden;
+    transition:
+      transform .32s var(--ease),
+      opacity .3s var(--ease),
+      max-width .38s var(--ease),
+      padding .38s var(--ease),
+      border-color .25s var(--ease),
+      background .25s var(--ease),
+      color .25s var(--ease),
+      box-shadow .25s var(--ease);
+  }
+  .choice:focus-visible{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .choice:hover{ color: var(--text); border-color: var(--text-faint); }
+
+  .choice.selected{
+    background: linear-gradient(135deg, var(--accent-strong), var(--accent) 65%, #6e1029);
+    color: #fbeef1;
+    border-color: var(--accent);
+    transform: scale(1.1);
+    box-shadow: 0 4px 14px -5px rgba(165,28,63,0.6);
+  }
+
+  /* The two un-picked pills shrink to nothing and fade out */
+  .choice.hidden-option{
+    opacity: 0;
+    max-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border-width: 0;
+    transform: scale(0.8);
+    pointer-events:none;
+  }
+
+  /* Subtle validation cue for a row still missing an answer.
+     Deliberately uses `transition`, not `animation` — the
+     question row's `animation` property is already spoken for
+     by its one-time entrance reveal (introQuestionReveal), and a
+     second `animation` rule here would silently replace that
+     declaration and make it replay later. A transition sidesteps
+     that entirely: it just eases the highlight in, then back out
+     when the class is removed a moment later. */
+  .question.needs-answer{
+    border-color: rgba(165,28,63,0.55);
+    background: rgba(165,28,63,0.06);
+    box-shadow: 0 0 0 3px rgba(165,28,63,0.12);
+  }
+  /* The accompanying micro-shake lives on the answer control
+     itself (the "answer area"), a separate element with no
+     animation of its own to collide with. */
+  @keyframes choiceShake{
+    0%   { transform: translateX(0); }
+    22%  { transform: translateX(-4px); }
+    44%  { transform: translateX(4px); }
+    66%  { transform: translateX(-2px); }
+    85%  { transform: translateX(1px); }
+    100% { transform: translateX(0); }
+  }
+  .question.needs-answer .choice-group{
+    animation: choiceShake .45s var(--ease);
+  }
+
+  /* Quiet reminder shown when Calculate is pressed with gaps left */
+  .incomplete-hint{
+    text-align:center;
+    font-size: 12px;
+    color: var(--text-dim);
+    opacity: 0;
+    max-height: 0;
+    overflow:hidden;
+    margin: 0;
+    transition: opacity .3s var(--ease), max-height .3s var(--ease), margin .3s var(--ease);
+  }
+  .incomplete-hint.visible{
+    opacity: 1;
+    max-height: 40px;
+    margin: 12px 0 0;
+  }
+
+  /* =========================================================
+     ACTIONS
+     ========================================================= */
+  .actions{
+    display:flex;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  button.action{
+    -webkit-tap-highlight-color: transparent;
+    border:none;
+    cursor:pointer;
+    font-family: inherit;
+    border-radius: var(--radius-md);
+    padding: 15px 18px;
+    font-size: 14.5px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    transition: transform var(--ease) .15s, filter var(--ease) .15s, background var(--ease) .15s;
+  }
+  button.action:active{ transform: scale(0.97); }
+
+  .btn-primary{
+    flex: 2.1;
+    color: #fbeef1;
+    background: linear-gradient(135deg, var(--accent-strong), var(--accent) 60%, #6e1029);
+    box-shadow: 0 8px 20px -8px rgba(165,28,63,0.55);
+  }
+  .btn-primary:hover{ filter: brightness(1.06); }
+  .btn-primary:disabled{
+    opacity:0.4;
+    cursor:not-allowed;
+    filter:none;
+    box-shadow:none;
+  }
+
+  .btn-secondary{
+    flex: 1;
+    color: var(--text-dim);
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+  }
+  .btn-secondary:hover{ color: var(--text); border-color: var(--text-faint); }
+
+  /* =========================================================
+     RESULT PANEL
+     ========================================================= */
+  .result{
+    margin-top: 4px;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height .5s var(--ease), opacity .4s var(--ease), margin-top .5s var(--ease);
+  }
+  .result.visible{
+    max-height: 320px;
+    opacity: 1;
+    margin-top: 22px;
+  }
+
+  .result-inner{
+    text-align:center;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+  }
+
+  .result-score-wrap{
+    position:relative;
+    display:inline-flex;
+    align-items:baseline;
+    justify-content:center;
+    gap:4px;
+  }
+
+  .result-score{
+    font-family:'Fraunces', serif;
+    font-weight:700;
+    font-size: 76px;
+    line-height:1;
+    letter-spacing:-0.02em;
+    background: linear-gradient(180deg, var(--accent-strong), var(--accent) 70%);
+    -webkit-background-clip:text;
+    background-clip:text;
+    color: transparent;
+    text-shadow: 0 0 40px var(--accent-soft);
+  }
+  .result-max{
+    font-size: 20px;
+    font-weight:700;
+    color: var(--text-faint);
+  }
+</style>
+
+</head>
+<body>
+
+<div class="intro-splash">
+  <div class="intro-title">Real Score</div>
+  <div class="intro-sub">Film Rating</div>
+</div>
+
+<div class="app-shell">
+  <div class="type-switcher">
+    <div class="type-highlight"></div>
+    <button class="type-btn active">MOVIE</button>
+    <button class="type-btn">SERIES</button>
+    <button class="type-btn">MINI SERIES</button>
+  </div>
+
+  <div class="card">
+    <div class="lang-toggle">
+      <button class="lang-btn active">EN</button>
+      <button class="lang-btn">FA</button>
+    </div>
+
+    <div class="eyebrow">Rate This</div>
+    <h1>Film Title</h1>
+    <p class="subtitle">Give your honest rating below</p>
+
+    <div class="title-field-wrap">
+      <input type="text" class="title-field" placeholder="Optional: Name of the film">
+    </div>
+
+    <div class="reel-strip">
+      <div class="reel-dot"></div>
+      <div class="reel-dot"></div>
+      <div class="reel-dot"></div>
+      <div class="reel-dot"></div>
+      <div class="reel-dot"></div>
+    </div>
+
+    <div class="questions-wrap">
+      <div class="questions">
+        <div class="question">
+          <div class="question-text">Technically Excellent?</div>
+          <div class="choice-group">
+            <button class="choice">No</button>
+            <button class="choice">Partial</button>
+            <button class="choice">Yes</button>
+          </div>
+        </div>
+        <div class="question">
+          <div class="question-text">Story Well Told?</div>
+          <div class="choice-group">
+            <button class="choice">No</button>
+            <button class="choice">Partial</button>
+            <button class="choice">Yes</button>
+          </div>
+        </div>
+        <div class="question">
+          <div class="question-text">Emotionally Engaging?</div>
+          <div class="choice-group">
+            <button class="choice">No</button>
+            <button class="choice">Partial</button>
+            <button class="choice">Yes</button>
+          </div>
+        </div>
+        <div class="question">
+          <div class="question-text">Original & Unique?</div>
+          <div class="choice-group">
+            <button class="choice">No</button>
+            <button class="choice">Partial</button>
+            <button class="choice">Yes</button>
+          </div>
+        </div>
+        <div class="question">
+          <div class="question-text">Worth Your Time?</div>
+          <div class="choice-group">
+            <button class="choice">No</button>
+            <button class="choice">Partial</button>
+            <button class="choice">Yes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="incomplete-hint">Please answer all questions</p>
+
+    <div class="actions">
+      <button class="action btn-primary">Calculate Score</button>
+      <button class="action btn-secondary">Reset</button>
+    </div>
+
+    <div class="result">
+      <div class="result-inner">
+        <div class="result-score-wrap">
+          <div class="result-score">—</div>
+          <div class="result-max">/10</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="app-footer">
+  <span>REAL SCORE — Movie & TV Rating System</span>
+</div>
+
+<script>
+  // Minimal interactive functionality
+  document.querySelectorAll('.choice').forEach(button => {
+    button.addEventListener('click', function() {
+      const group = this.parentElement;
+      group.querySelectorAll('.choice').forEach(btn => {
+        btn.classList.remove('selected', 'hidden-option');
+      });
+      this.classList.add('selected');
+      
+      const others = Array.from(group.querySelectorAll('.choice')).filter(btn => btn !== this);
+      others.forEach(btn => btn.classList.add('hidden-option'));
+    });
+  });
+
+  document.querySelector('.btn-primary').addEventListener('click', () => {
+    const questions = document.querySelectorAll('.question');
+    const answers = Array.from(questions).filter(q => q.querySelector('.choice.selected'));
+    
+    if (answers.length === questions.length) {
+      const score = Math.floor(Math.random() * 11);
+      document.querySelector('.result').classList.add('visible');
+      document.querySelector('.result-score').textContent = score;
+    } else {
+      document.querySelector('.incomplete-hint').classList.add('visible');
+      setTimeout(() => {
+        document.querySelector('.incomplete-hint').classList.remove('visible');
+      }, 2000);
+    }
+  });
+
+  document.querySelector('.btn-secondary').addEventListener('click', () => {
+    document.querySelectorAll('.choice').forEach(btn => {
+      btn.classList.remove('selected', 'hidden-option');
+    });
+    document.querySelector('.result').classList.remove('visible');
+    document.querySelector('.incomplete-hint').classList.remove('visible');
+  });
+</script>
+
+</body>
+</html>
